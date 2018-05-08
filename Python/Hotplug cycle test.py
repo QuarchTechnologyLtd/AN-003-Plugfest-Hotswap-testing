@@ -8,8 +8,8 @@ This application note was written to be used in conjunction with QuarchPy python
 
 ########### INSTRUCTIONS ###########
 
-1- Connect a Quarch module to your PC via USB, Serial or LAN
-2- Comment in one of the 'module = ' lines below, based on the USB/Serial/LAN option you are using
+1- Connect a Quarch module to your PC via QTL1260 Interface kit and USB cable with the button pushed in
+2- If needed, install the FTDI VCOM driver to support the virtual COM port
 
 
 ####################################
