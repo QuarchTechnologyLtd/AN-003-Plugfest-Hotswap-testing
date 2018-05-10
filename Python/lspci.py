@@ -67,6 +67,10 @@ def getLinkStatus (deviceStr):
     if (err):
         print ("ERROR: " + err)
 
+    # Locate the link status section    
+    strPos = out.find ('LnkSta:')    
+    out = out[strPos:]
+
     # Get the link speed
     matchObj = re.search ('Speed (.*?),', out)
     linkSpeed = matchObj.group(0)
