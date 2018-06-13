@@ -83,7 +83,7 @@ LogWrite
 LogWrite 
 
 # Get initial link details of PCIe device
-Get_Link_Status $Device ([ref]$link_speed) ([ref] $link_width)
+Get_Link_Status $Device ([ref]$link_speed) ([ref] $link_width) $MappingMode
 $starting_speed = $link_speed
 $starting_width = $link_width
 
@@ -157,7 +157,7 @@ for ($TestStage=0;$TestStage -lt $Test_Delay_List.length; $TestStage++)
 		Start-Sleep -s $off_time
 
 		#verify device has gone away
-		$result = Device_Present $Device
+		$result = Device_Present $Device $MappingMode
 
 		if ($result -eq $true)
 		{
@@ -183,7 +183,7 @@ for ($TestStage=0;$TestStage -lt $Test_Delay_List.length; $TestStage++)
 		Start-Sleep -s $on_time
 
 		#verify device is back
-		$result = Device_Present $Device
+		$result = Device_Present $Device $MappingMode
 
 		if ($result -eq $false)
 		{
@@ -196,7 +196,7 @@ for ($TestStage=0;$TestStage -lt $Test_Delay_List.length; $TestStage++)
 		}
 
 		#verify link width and speed
-		Get_Link_Status $Device ([ref]$link_speed) ([ref]$link_width)
+		Get_Link_Status $Device ([ref]$link_speed) ([ref]$link_width) $MappingMode
 		if ($link_speed -ne $starting_speed)
 		{
 			LogWrite "***FAIL: $Test - Speed Mismatch, $starting_speed -> $link_speed***"

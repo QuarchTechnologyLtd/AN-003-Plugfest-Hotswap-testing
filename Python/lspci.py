@@ -37,7 +37,10 @@ def getPcieDevices(mappingMode):
     # Add valid device lines to the list
     for pciStr in iter(out.splitlines ()):
         matchObj = re.match ('[0-9a-fA-F]+:[0-9a-fA-F]+.[0-9a-fA-F]', pciStr)
-        matchStr = matchObj.group(0)
+        try:
+            matchStr = matchObj.group(0)
+        except:
+            matchStr = ""
         if (len(matchStr) > 0):
             if pciStr.find ('##') == -1:
                 pcieDevices.append (pciStr)
@@ -57,9 +60,13 @@ def devicePresentInList (deviceList, deviceStr):
 '''
 Returns the link status and speed of the device specified
 '''
-def getLinkStatus (deviceStr):
+def getLinkStatus (deviceStr, mappingMode):
     lspciPath = os.path.join (os.getcwd(), "pciutils", "lspci.exe")
-    proc = subprocess.Popen([lspciPath, '-vv', '-s ' + deviceStr], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    if mappingMode == False:
+        proc = subprocess.Popen([lspciPath, '-vv', '-s ' + deviceStr], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    else:
+        proc = subprocess.Popen([lspciPath, '-M','-vv', '-s ' + deviceStr], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     # Execute the process
     out, err = proc.communicate()
@@ -108,7 +115,7 @@ def pickPcieTarget (deviceStr, mappingMode):
         # Print the list of devices
         count = 0
         for pcieStr in deviceList:
-            print str(count) + ")  " + str(deviceList[count])
+            print (str(count) + ")  " + str(deviceList[count]))
             count = count + 1
 
         # Ask for selection

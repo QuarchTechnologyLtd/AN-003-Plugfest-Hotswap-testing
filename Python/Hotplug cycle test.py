@@ -112,7 +112,7 @@ def main():
         quit()
 
     # Get the current link status
-    linkStartSpeed, linkStartWidth = getLinkStatus (pcieDevice)
+    linkStartSpeed, linkStartWidth = getLinkStatus (pcieDevice, mappingMode)
     logWrite ("PCIe device link speed: " + linkStartSpeed)
     logWrite ("PCIe device link width: " + linkStartWidth)
 
@@ -175,7 +175,7 @@ def main():
                 logWrite ("  - Device enumerated correctly")
 
             # Verify link width and speed
-            linkEndSpeed, linkEndWidth = getLinkStatus (pcieDevice)
+            linkEndSpeed, linkEndWidth = getLinkStatus (pcieDevice, mappingMode)
             if linkStartSpeed != linkEndSpeed:
                 logWrite ("***FAIL: " + testName + " - Speed Mismatch, " + linkStartSpeed + " -> " + linkEndSpeed + "***")
                 exitScript (myDevice)

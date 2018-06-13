@@ -46,17 +46,25 @@ function List_PCI_Devices([bool]$MappingMode)
 }
 export-modulemember -function List_PCI_Devices
 
-function Device_Present([string] $Device)
+function Device_Present([string] $Device, [bool]$MappingMode)
 {
-    List_PCI_Devices > $null
+    List_PCI_Devices $MappingMode > $null
     #make sure device id is not present in list
     ($PCIeDeviceList -split ' ' -contains $Device)
 }
 export-modulemember -function Device_Present
 
-Function Get_Link_Status([string] $Device, [ref]$Speed, [ref]$Width)
+Function Get_Link_Status([string] $Device, [ref]$Speed, [ref]$Width, [bool]$MappingMode)
 {
-    $output = cmd /c "$PSScriptRoot\pciutils\lspci.exe" "-vv" "-s $Device" 2`>`&1
+    if ($MappingMode)
+	{
+		$output = cmd /c "$PSScriptRoot\pciutils\lspci.exe" "-M" "-vv" "-s $Device" 2`>`&1
+	}
+    else
+    {
+        $output = cmd /c "$PSScriptRoot\pciutils\lspci.exe" "-vv" "-s $Device" 2`>`&1
+    }
+    
     #get link status line
     $link_status = $output | select-string -pattern "lnksta:"
     #get current speed "Speed [x.xGT/s],"
