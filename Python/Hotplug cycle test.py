@@ -138,8 +138,9 @@ def main():
         for currentIteration in range (0, cycleIterations):
             logWrite ("")
             logWrite ("")
-            logWrite ("=====================")
+            logWrite ("===============================")
             logWrite ("Test -" + testName + " - " + str(currentIteration+1) + "/" + str(cycleIterations))
+            logWrite ("===============================")
             logWrite ("")
 
             # Setup hotplug timing (QTL1743 uses 3 sources by default)
