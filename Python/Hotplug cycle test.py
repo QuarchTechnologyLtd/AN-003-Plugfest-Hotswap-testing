@@ -95,11 +95,11 @@ def main():
     # Print header intro text
     logWrite ("Quarch Technology Ltd")
     logWrite ("HotPlug Test Suite V3.0")
-    logWrite ("(c) Quarch Technology Ltd 2015-2018")
+    logWrite ("(c) Quarch Technology Ltd 2015-2019")
     logWrite ("")
 
     # Get the connection string
-    moduleStr = raw_input ("Enter the connection type followed by the module serial number: \ne.g.:\nUSB:QTL1743 - Connects directly to the module.\nREST:QTL1461 - Connects to the array controller and prompts for the (array) port the module is connected to.\n>>")
+    moduleStr = raw_input ("Enter the connection type followed by the module serial number: \ne.g.:\nUSB:QTL1743 OR SERIAL:COM4 - Connects directly to the module.\nREST:QTL1461 - Connects to the array controller and prompts for the (array) port the module is connected to.\n>>")
 
     if "1079" in moduleStr or "1461" in moduleStr:
         print (moduleStr)
