@@ -13,17 +13,22 @@ This application note was written to be used in conjunction with QuarchPy python
 ####################################
 '''
 
-#Imports QuarchPy library, providing the functions needed to use Quarch modules
+# Try to make script back compatible to python 2.x
 from __future__ import print_function
+try:
+    input = raw_input
+except NameError:
+    pass
+#Imports QuarchPy library, providing the functions needed to use Quarch modules    
 from quarchpy import quarchDevice
-from lspci import pickPcieTarget, checkAdmin, getLinkStatus, devicePresent
+from lspci_old import pickPcieTarget, checkAdmin, getLinkStatus, devicePresent
 
 # Import other libraries used in the examples
 import os
 import time
 import platform
 import datetime
-import exceptions
+#import exceptions
 
 '''
 Prints to screen and to the logfile at the same time
@@ -99,12 +104,12 @@ def main():
     logWrite ("")
 
     # Get the connection string
-    moduleStr = raw_input ("Enter the connection type followed by the module serial number: \ne.g.:\nUSB:QTL1743 OR SERIAL:COM4 - Connects directly to the module.\nREST:QTL1461 - Connects to the array controller and prompts for the (array) port the module is connected to.\n>>")
+    moduleStr = input ("Enter the connection type followed by the module serial number: \ne.g.:\nUSB:QTL1743 OR SERIAL:COM4 - Connects directly to the module.\nREST:QTL1461 - Connects to the array controller and prompts for the (array) port the module is connected to.\n>>")
 
     if "1079" in moduleStr or "1461" in moduleStr:
         print (moduleStr)
         global port
-        port = raw_input ("Enter the port you would like to connect to (e.g. 1, 2, 3 ... 28) >> ")
+        port = input ("Enter the port you would like to connect to (e.g. 1, 2, 3 ... 28) >> ")
         port = " <" + port + ">"
     else:
         port = ""

@@ -30,6 +30,8 @@ def getPcieDevices(mappingMode):
 
     # Execute the process
     out, err = proc.communicate()
+    out = out.decode("utf-8")
+    err = err.decode("utf-8")
     # Handle error output
     if (err):
         print ("ERROR: " + err)
@@ -70,6 +72,8 @@ def getLinkStatus (deviceStr, mappingMode):
 
     # Execute the process
     out, err = proc.communicate()
+    out = out.decode("utf-8")
+    err = err.decode("utf-8")
     # Handle error output
     if (err):
         print ("ERROR: " + err)
@@ -119,13 +123,13 @@ def pickPcieTarget (deviceStr, mappingMode):
             count = count + 1
 
         # Ask for selection
-        selection = raw_input('Enter a numerical selection and press enter: ')
+        selection = input('Enter a numerical selection and press enter: ')
         # exit on 'q'
         if "q" in selection:
             return 0
         # Validate selection
         if re.match ('[0-9]+', selection):
-            if int(selection) < deviceList.count:
+            if int(selection) < len(deviceList):
                 deviceStr = deviceList[int(selection)]
                 matchObj = re.match ('[0-9a-fA-F]+:[0-9a-fA-F]+.[0-9a-fA-F]', deviceStr)
                 deviceStr = matchObj.group(0)
