@@ -6,10 +6,13 @@ This application note was written to be used in conjunction with QuarchPy python
 
 05/04/2018 - Andy Norrie	- First version
 14/10/2018 - Pedro Cruz	- Added support to other connection types and array controllers
+27/11/2019 - Stuart Boon - Compatable with linux, moved to lspci in Qpy, Updated for newest Qpy features like drive and module selection.
 ########### INSTRUCTIONS ###########
 
-1- Connect a Quarch module to your PC via QTL1260 Interface kit or array controller
-
+1- Connect a Quarch module to your PC via QTL1260 Interface kit or array controller.
+2- Check test parameters.
+3- Run this script using in an elevated command prompt.
+4- Select the module and drive in your set up and watch the results.
 ####################################
 '''
 
@@ -19,9 +22,12 @@ try:
     input = raw_input
 except NameError:
     pass
-#Imports QuarchPy library, providing the functions needed to use Quarch modules    
-from quarchpy import quarchDevice
-from lspci_old import pickPcieTarget, checkAdmin, getLinkStatus, devicePresent
+#Imports QuarchPy library, providing the functions needed to use Quarch modules
+import re
+from quarchpy.device import *
+from quarchpy.user_interface import *
+from quarchpy.disk_test.hostInformation import HostInformation
+myHostInfo = HostInformation()
 
 # Import other libraries used in the examples
 import os
@@ -48,7 +54,7 @@ def exitScript (myDevice):
     quit()
 
 def setDefaultState (myDevice):
-    myDevice.sendCommand ("conf:def:state"+ port)
+    myDevice.sendCommand ("conf:def:state")
     time.sleep(3)
     
 
@@ -72,7 +78,7 @@ def setupSimpleHotplug (myDevice, delayTime, stepCount):
         # Calculate the next source delay. Additional sources are set to the last value used
         if steps <= stepCount:
             nextDelay = (steps - 1 ) * delayTime
-        cmdResult = myDevice.sendCommand ("source:" + str(steps) + ":delay " + str(nextDelay)+ port)
+        cmdResult = myDevice.sendCommand ("source:" + str(steps) + ":delay " + str(nextDelay))
         if "OK" not in cmdResult:
                 logWrite ("***FAIL: Config command failed to execute correctly***")
                 logWrite ("***" + cmdResult)
@@ -95,7 +101,7 @@ def main():
     cycleIterations = 10            # Number of cycles at each speed
 
     # Check admin permissions (exits on failure)
-    checkAdmin ()
+    myHostInfo.checkAdmin()
 
     # Print header intro text
     logWrite ("Quarch Technology Ltd")
@@ -104,15 +110,8 @@ def main():
     logWrite ("")
 
     # Get the connection string
-    moduleStr = input ("Enter the connection type followed by the module serial number: \ne.g.:\nUSB:QTL1743 OR SERIAL:COM4 - Connects directly to the module.\nREST:QTL1461 - Connects to the array controller and prompts for the (array) port the module is connected to.\n>>")
+    moduleStr = userSelectDevice(nice=True)
 
-    if "1079" in moduleStr or "1461" in moduleStr:
-        print (moduleStr)
-        global port
-        port = input ("Enter the port you would like to connect to (e.g. 1, 2, 3 ... 28) >> ")
-        port = " <" + port + ">"
-    else:
-        port = ""
             
     # Create a device using the module connection string
     myDevice = quarchDevice(moduleStr)
@@ -120,89 +119,27 @@ def main():
     # Sets the module to default state
     setDefaultState (myDevice)
 
+    print(myDevice.sendCommand("run pow up"))
     # Check the module is connected and working
     QuarchSimpleIdentify (myDevice)
 
-    # Select the PCIe device to use
-    pcieDevice = pickPcieTarget ('none', mappingMode)
-    if (pcieDevice == 0):
-        logWrite ("***FAIL: Valid PCIe device was not selected***")
-        quit()
+    listOfDrives = myHostInfo.getDriveList(mappingMode)
+    selectedDrive= None
+    while selectedDrive is None or selectedDrive in "Rescan":
+        selectedDrive = listSelection(selectionList=listOfDrives, nice=True, additionalOptions=["Rescan", "Quit"], tableHeaders=["Drive"], align="c")
+    if selectedDrive in "Quit":
+        printText("User quit program")
+        exit(1)
 
-    # Get the current link status
-    linkStartSpeed, linkStartWidth = getLinkStatus (pcieDevice, mappingMode)
-    logWrite ("PCIe device link speed: " + linkStartSpeed)
-    logWrite ("PCIe device link width: " + linkStartWidth)
-
-    # Loop through the list of plug speeds
-    for testDelay in plugSpeeds:
-        testName = str(testDelay) + "mS HotPlug Test"
-        iteration = 0
-
-        # Loop through plug iterations
-        for currentIteration in range (0, cycleIterations):
-            logWrite ("")
-            logWrite ("")
-            logWrite ("===============================")
-            logWrite ("Test -" + testName + " - " + str(currentIteration+1) + "/" + str(cycleIterations))
-            logWrite ("===============================")
-            logWrite ("")
-
-            # Setup hotplug timing (QTL1743 uses 3 sources by default)
-            setupSimpleHotplug (myDevice, testDelay, 3)
-
-            # Pull the drive
-            logWrite ("Beginning the test sequence:\n")
-            logWrite ("  - Pulling the device...")
-            cmdResult = myDevice.sendCommand ("RUN:POWer DOWN"+ port)
-            print ("    <"+cmdResult+">")
-            if "OK" not in cmdResult:
-                logWrite ("***FAIL: Power down command failed to execute correctly***")
-                logWrite ("***" + cmdResult)
-                exitScript (myDevice)
-
-            # Wait for device to remove
-            logWrite ("  - Waiting for device removal (" + str(offTime) + " Seconds)...")
-            time.sleep(offTime)
-
-            # Check that the device removed correctly
-            cmdResult = devicePresent (pcieDevice ,mappingMode)
-            if cmdResult == True:
-                logWrite ("***FAIL: " + testName + " - Device did not remove***")
-                exitScript (myDevice)
-            else:
-                logWrite ("    <Device removed correctly!>")
-
-            # Power up the drive
-            logWrite ("\n  - Plugging the device")
-            cmdResult = myDevice.sendCommand ("RUN:POWer UP"+ port)
-            print ("    <"+cmdResult+">")
-            if "OK" not in cmdResult:
-                logWrite ("***FAIL: Power down command failed to execute correctly***")
-                exitScript (myDevice)
-
-            # Wait for device to enumerate
-            logWrite ("  - Waiting for device enumeration (" + str(onTime) + " Seconds)...")
-            time.sleep(onTime)
-
-            # Verify the device is back
-            cmdResult = devicePresent (pcieDevice, mappingMode)
-            if cmdResult == False:
-                logWrite ("***FAIL: " + testName + " - Device not present***")
-                exitScript (myDevice)
-            else:
-                logWrite ("    <Device enumerated correctly!>")
-
-            # Verify link width and speed
-            linkEndSpeed, linkEndWidth = getLinkStatus (pcieDevice, mappingMode)
-            if linkStartSpeed != linkEndSpeed:
-                logWrite ("***FAIL: " + testName + " - Speed Mismatch, " + linkStartSpeed + " -> " + linkEndSpeed + "***")
-                exitScript (myDevice)
-            if linkStartWidth != linkEndWidth:
-                logWrite ("***FAIL: " + testName + " - Width Mismatch, " + linkStartWidth + " -> " + linkEndWidth + "***")
-                exitScript (myDevice)
-            
-            logWrite ("Test - " + testName + " - Passed")
+    matchObj = re.match('[0-9a-fA-F]+:[0-9a-fA-F]+.[0-9a-fA-F]', selectedDrive)
+    if matchObj is not None:
+        myDrive = matchObj.group(0)
+        driveType = "pcie"
+        pcieHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive, plugSpeeds, driveType)
+    else:
+        myDrive = selectedDrive
+        driveType = "sas"
+        basicHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive, plugSpeeds, driveType)
 
     logWrite ("")
     logWrite ("ALL DONE!")
@@ -212,18 +149,167 @@ def main():
     # Close the module before exiting the script
     myDevice.closeConnection()
 
+def basicHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive, plugSpeeds, driveType):
+    # Loop through the list of plug speeds
+    for testDelay in plugSpeeds:
+        testName = str(testDelay) + "mS HotPlug Test"
+        iteration = 0
+
+        # Loop through plug iterations
+        for currentIteration in range(0, cycleIterations):
+            logWrite("")
+            logWrite("")
+            logWrite("===============================")
+            logWrite("Test -" + testName + " - " + str(currentIteration + 1) + "/" + str(cycleIterations))
+            logWrite("===============================")
+            logWrite("")
+
+            # Setup hotplug timing (QTL1743 uses 3 sources by default)
+            setupSimpleHotplug(myDevice, testDelay, 3)
+
+            # Pull the drive
+            logWrite("Beginning the test sequence:\n")
+            logWrite("  - Pulling the device...")
+            cmdResult = myDevice.sendCommand("RUN:POWer DOWN")
+            print("    <" + cmdResult + ">")
+            if "OK" not in cmdResult:
+                logWrite("***FAIL: Power down command failed to execute correctly***")
+                logWrite("***" + cmdResult)
+                exitScript(myDevice)
+            # Wait for device to remove
+            logWrite("  - Waiting for device removal (" + str(offTime) + " Seconds Max)...")
+            startTime = time.time()
+            currentTime = time.time()
+            while True:
+                cmdResult = myHostInfo.isDevicePresent(myDrive, mappingMode, driveType)
+                currentTime = time.time()
+                if cmdResult is False:
+                    logWrite("Device removed correctly in " +str(currentTime - startTime)+" sec")
+                    break
+                if currentTime - startTime > offTime:
+                    logWrite("***FAIL: " + testName + " - Drive did not remove after "+ str(offTime)+ " sec ***")
+                    break
+
+
+
+            # Power up the drive
+            logWrite("\n  - Plugging the device")
+            cmdResult = myDevice.sendCommand("RUN:POWer UP")
+            print("    <" + cmdResult + ">")
+            if "OK" not in cmdResult:
+                logWrite("***FAIL: Power down command failed to execute correctly***")
+                logWrite("***" + cmdResult)
+                exitScript(myDevice)
+            # Wait for device to enumerate
+            logWrite("  - Waiting for device enumeration (" + str(onTime) + " Seconds Max)...")
+            startTime = time.time()
+            currentTime = time.time()
+            while True:
+                cmdResult = myHostInfo.isDevicePresent(myDrive, mappingMode, driveType)
+                currentTime = time.time()
+                if cmdResult is True:
+                    logWrite("<Device enumerated correctly in " + str(currentTime - startTime) + " sec>")
+                    break
+                if currentTime - startTime > onTime:
+                    logWrite("***FAIL: " + testName + " - Drive did not remove after " + str(onTime) + " sec ***")
+                    break
+
+            logWrite("Test - " + testName + " - Passed")
+
+
+def pcieHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive, plugSpeeds, driveType):
+    # Get the current link status
+    linkStartSpeed, linkStartWidth = myHostInfo.getPcieLinkStatus(myDrive, mappingMode)
+    logWrite("PCIe device link speed: " + linkStartSpeed)
+    logWrite("PCIe device link width: " + linkStartWidth)
+    # Loop through the list of plug speeds
+    for testDelay in plugSpeeds:
+        testName = str(testDelay) + "mS HotPlug Test"
+        iteration = 0
+
+        # Loop through plug iterations
+        for currentIteration in range(0, cycleIterations):
+            logWrite("")
+            logWrite("")
+            logWrite("===============================")
+            logWrite("Test -" + testName + " - " + str(currentIteration + 1) + "/" + str(cycleIterations))
+            logWrite("===============================")
+            logWrite("")
+
+            # Setup hotplug timing (QTL1743 uses 3 sources by default)
+            setupSimpleHotplug(myDevice, testDelay, 3)
+
+            # Pull the drive
+            logWrite("Beginning the test sequence:\n")
+            logWrite("  - Pulling the device...")
+            cmdResult = myDevice.sendCommand("RUN:POWer DOWN")
+            print("    <" + cmdResult + ">")
+            if "OK" not in cmdResult:
+                logWrite("***FAIL: Power down command failed to execute correctly***")
+                logWrite("***" + cmdResult)
+                exitScript(myDevice)
+            # Wait for device to remove
+            logWrite("  - Waiting for device removal (" + str(offTime) + " Seconds Max)...")
+            startTime = time.time()
+            currentTime = time.time()
+            while True:
+                cmdResult = myHostInfo.isDevicePresent(myDrive, mappingMode, driveType)
+                currentTime = time.time()
+                if cmdResult is False:
+                    logWrite("Device removed correctly in " + str(currentTime - startTime) + " sec")
+                    break
+                if currentTime - startTime > offTime:
+                    logWrite("***FAIL: " + testName + " - Drive did not remove after " + str(offTime) + " sec ***")
+                    break
+
+            # Power up the drive
+            logWrite("\n  - Plugging the device")
+            cmdResult = myDevice.sendCommand("RUN:POWer UP")
+            print("    <" + cmdResult + ">")
+            if "OK" not in cmdResult:
+                logWrite("***FAIL: Power down command failed to execute correctly***")
+                logWrite("***" + cmdResult)
+                exitScript(myDevice)
+            # Wait for device to enumerate
+            logWrite("  - Waiting for device enumeration (" + str(onTime) + " Seconds Max)...")
+            startTime = time.time()
+            currentTime = time.time()
+            while True:
+                cmdResult = myHostInfo.isDevicePresent(myDrive, mappingMode, driveType)
+                currentTime = time.time()
+                if cmdResult is True:
+                    logWrite("<Device enumerated correctly in " + str(currentTime - startTime) + " sec>")
+                    break
+                if currentTime - startTime > onTime:
+                    logWrite("***FAIL: " + testName + " - Drive did not remove after " + str(onTime) + " sec ***")
+                    break
+
+            # Verify link width and speed
+            linkEndSpeed, linkEndWidth = myHostInfo.getPcieLinkStatus(myDrive, mappingMode)
+            if linkStartSpeed != linkEndSpeed:
+                logWrite(
+                    "***FAIL: " + testName + " - Speed Mismatch, " + linkStartSpeed + " -> " + linkEndSpeed + "***")
+                exitScript(myDevice)
+            if linkStartWidth != linkEndWidth:
+                logWrite(
+                    "***FAIL: " + testName + " - Width Mismatch, " + linkStartWidth + " -> " + linkEndWidth + "***")
+                exitScript(myDevice)
+
+            logWrite("Test - " + testName + " - Passed")
+
+
 '''
 This function demonstrates a very simple module identify, that will work with any Quarch device
 '''
 def QuarchSimpleIdentify(device1):
     # Print the module name
     time.sleep(0.1)
-    print("\nModule Name:"),
-    print("<"+device1.sendCommand("hello?" + port)+">")
+    print("\nModule Name:")
+    print(device1.sendCommand("hello?"))
     time.sleep(0.1)
     # Print the module identify and version information
     print("\nModule Status:")
-    print("<"+device1.sendCommand("*tst?"+ port)+">")
+    print(device1.sendCommand("*tst?"))
     print("")
 
 
