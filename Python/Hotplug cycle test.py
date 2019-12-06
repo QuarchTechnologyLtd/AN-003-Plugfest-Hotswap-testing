@@ -91,7 +91,6 @@ Opens the connection, call the selected example function(s) and closes the conne
 The constructor opens the connection by default.  You must always close a connection before you exit
 '''
 def main():
-def main():
     linkSpeed = "ERROR"
     linkWidth = "ERROR"    
 
