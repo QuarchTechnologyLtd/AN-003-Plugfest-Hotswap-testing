@@ -6,7 +6,7 @@ This application note was written to be used in conjunction with QuarchPy python
 
 05/04/2018 - Andy Norrie	- First version
 14/10/2018 - Pedro Cruz	- Added support to other connection types and array controllers
-27/11/2019 - Stuart Boon - Compatable with linux, moved to lspci in Qpy, Updated for newest Qpy features like drive and module selection.
+27/11/2019 - Stuart Boon - Compatible with linux, moved to lspci in Qpy, Updated for newest Qpy features like drive and module selection.
 ########### INSTRUCTIONS ###########
 
 1- Connect a Quarch module to your PC via QTL1260 Interface kit or array controller.
@@ -27,6 +27,7 @@ import re
 from quarchpy.device import *
 from quarchpy.user_interface import *
 from quarchpy.disk_test.hostInformation import HostInformation
+from quarchpy.debug.versionCompare import *
 myHostInfo = HostInformation()
 
 # Import other libraries used in the examples
@@ -90,9 +91,12 @@ Opens the connection, call the selected example function(s) and closes the conne
 The constructor opens the connection by default.  You must always close a connection before you exit
 '''
 def main():
+def main():
     linkSpeed = "ERROR"
     linkWidth = "ERROR"    
-    
+
+    if not requiredQuarchpyVersion("2.0.11"):
+        exit()
     # Setting parameters that control the test
     onTime = 10                     # Drive on time
     offTime = 10                    # Drive off time
