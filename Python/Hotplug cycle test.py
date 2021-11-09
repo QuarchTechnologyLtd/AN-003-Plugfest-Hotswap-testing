@@ -26,7 +26,7 @@ except NameError:
 import re
 from quarchpy.device import *
 from quarchpy.user_interface import *
-from quarchpy.disk_test.hostInformation import HostInformation
+from QuarchpyQCS.hostInformation import HostInformation
 from quarchpy.debug.versionCompare import *
 myHostInfo = HostInformation()
 
@@ -117,7 +117,7 @@ def main():
 
             
     # Create a device using the module connection string
-    myDevice = quarchDevice(moduleStr)
+    myDevice = getQuarchDevice(moduleStr)
 
     # Sets the module to default state
     setDefaultState (myDevice)
@@ -319,4 +319,4 @@ def QuarchSimpleIdentify(device1):
 
 
 if __name__== "__main__":
- main()
+    main()
