@@ -7,6 +7,8 @@ This application note was written to be used in conjunction with QuarchPy python
 05/04/2018 - Andy Norrie	- First version
 14/10/2018 - Pedro Cruz	- Added support to other connection types and array controllers
 27/11/2019 - Stuart Boon - Compatible with linux, moved to lspci in Qpy, Updated for newest Qpy features like drive and module selection.
+11/11/2021 - Stuart Boon / Matt Holsey - Updating for use with newer drive detection mechanisms
+
 ########### INSTRUCTIONS ###########
 
 1- Connect a Quarch module to your PC via QTL1260 Interface kit or array controller.
@@ -25,10 +27,14 @@ except NameError:
 #Imports QuarchPy library, providing the functions needed to use Quarch modules
 import re
 from quarchpy.device import *
+from quarchpy.device.device import *
 from quarchpy.user_interface import *
 from QuarchpyQCS.hostInformation import HostInformation
 from quarchpy.debug.versionCompare import *
+from quarchpy.user_interface.user_interface import displayTable
+
 myHostInfo = HostInformation()
+summary_list = []
 
 # Import other libraries used in the examples
 import os
@@ -58,6 +64,23 @@ def setDefaultState (myDevice):
     myDevice.sendCommand ("conf:def:state")
     time.sleep(3)
     
+def is_user_admin():
+    if os.name == 'nt':
+        import ctypes
+        # WARNING: requires Windows XP SP2 or higher!
+        try:
+            # If == 1, user is running from elevated cmd prompt
+            # printText(ctypes.windll.shell32.IsUserAnAdmin() == 1)
+            return ctypes.windll.shell32.IsUserAnAdmin() == 1
+        except:
+            traceback.print_exc()
+            return False
+    elif os.name == 'posix':
+        # Check for root on Posix
+        return os.getuid() == 0
+    else:
+        raise RuntimeError("Unsupported operating system for this module: %s" % (os.name,))
+
 
 '''
 Sets up a simple hot-plug timing.  6 times sources are available on most modules.
@@ -94,39 +117,43 @@ def main():
     linkSpeed = "ERROR"
     linkWidth = "ERROR"    
 
-    if not requiredQuarchpyVersion("2.0.11"):
-        exit()
+    # if not requiredQuarchpyVersion("2.0.11"):
+    #     exit()
     # Setting parameters that control the test
     onTime = 10                     # Drive on time
     offTime = 10                    # Drive off time
     mappingMode = False             # lspci mapping mode
     plugSpeeds = [25,100,10,500]    # Hot plug speeds
-    cycleIterations = 10            # Number of cycles at each speed
+    cycleIterations = 3            # Number of cycles at each speed
 
     # Check admin permissions (exits on failure)
-    myHostInfo.checkAdmin()
+    if not is_user_admin():
+        logWrite("Application note must be run with administrative privileges.")
 
     # Print header intro text
     logWrite ("Quarch Technology Ltd")
     logWrite ("HotPlug Test Suite V3.0")
-    logWrite ("(c) Quarch Technology Ltd 2015-2019")
+    logWrite ("(c) Quarch Technology Ltd 2015-2021")
     logWrite ("")
 
     # Get the connection string
     moduleStr = userSelectDevice(nice=True)
 
-            
+
     # Create a device using the module connection string
-    myDevice = getQuarchDevice(moduleStr)
+    myQuarchModule = getQuarchDevice(moduleStr)
 
     # Sets the module to default state
-    setDefaultState (myDevice)
+    setDefaultState (myQuarchModule)
 
-    print(myDevice.sendCommand("run pow up"))
+    print(myQuarchModule.sendCommand("run pow up"))
     # Check the module is connected and working
-    QuarchSimpleIdentify (myDevice)
+    QuarchSimpleIdentify (myQuarchModule)
 
-    listOfDrives = myHostInfo.getDriveList(mappingMode)
+    listOfDrives = myHostInfo.return_wrapped_drives()
+
+    listOfDrives = return_drives_as_list(listOfDrives)
+
     selectedDrive= None
     while selectedDrive is None or selectedDrive in "Rescan":
         selectedDrive = listSelection(selectionList=listOfDrives, nice=True, additionalOptions=["Rescan", "Quit"], tableHeaders=["Drive"], align="c")
@@ -134,25 +161,37 @@ def main():
         printText("User quit program")
         exit(1)
 
-    matchObj = re.match('[0-9a-fA-F]+:[0-9a-fA-F]+.[0-9a-fA-F]', selectedDrive)
-    if matchObj is not None:
-        myDrive = matchObj.group(0)
-        driveType = "pcie"
-        pcieHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive, plugSpeeds, driveType)
+    selectedDrive = selectedDrive.split(":-")
+    myDrive = myHostInfo.get_wrapped_drive_from_choice(selectedDrive[0])
+
+    if myDrive.drive_type == "pcie":
+        pcieHotplug(cycleIterations, mappingMode, myQuarchModule, offTime, onTime, myDrive, plugSpeeds)
     else:
-        myDrive = selectedDrive
-        driveType = "sas"
-        basicHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive, plugSpeeds, driveType)
+        basicHotplug(cycleIterations, mappingMode, myQuarchModule, offTime, onTime, myDrive, plugSpeeds)
+
 
     logWrite ("")
-    logWrite ("ALL DONE!")
-    logWrite ("\nTest - " + "100% Tests run" + " - Passed")
+
+    """
+    display_options = []
+    for item in run_options:        
+        short_name = item[1]        
+        description = item[3]
+        display_options.append([short_name,description])"""
+    logWrite("Test Complete")
+    if summary_list:
+        displayTable(summary_list, align="l", tableHeaders=["Delay (mS)", "Test iteration", "Failure description"])
+    else:
+        logWrite("All tests Passed!")
+
     logWrite ("")
             
     # Close the module before exiting the script
-    myDevice.closeConnection()
+    myQuarchModule.closeConnection()
 
-def basicHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive, plugSpeeds, driveType):
+def basicHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive, plugSpeeds):
+
+
     # Loop through the list of plug speeds
     for testDelay in plugSpeeds:
         testName = str(testDelay) + "mS HotPlug Test"
@@ -184,13 +223,16 @@ def basicHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDriv
             startTime = time.time()
             currentTime = time.time()
             while True:
-                cmdResult = myHostInfo.isDevicePresent(myDrive, mappingMode, driveType)
+                cmdResult = myHostInfo.is_wrapped_device_present(myDrive)
                 currentTime = time.time()
                 if cmdResult is False:
                     logWrite("Device removed correctly in " +str(currentTime - startTime)+" sec")
                     break
                 if currentTime - startTime > offTime:
-                    logWrite("***FAIL: " + testName + " - Drive did not remove after "+ str(offTime)+ " sec ***")
+                    logWrite("***FAIL: " + testName + " - Drive was not removed after "+ str(offTime)+ " sec ***")
+
+                    summary_list.append([str(testDelay), str(currentIteration + 1) + "/" + str(cycleIterations),
+                                         "Drive was not removed after "+ str(offTime) + " sec"])
                     break
 
 
@@ -208,23 +250,27 @@ def basicHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDriv
             startTime = time.time()
             currentTime = time.time()
             while True:
-                cmdResult = myHostInfo.isDevicePresent(myDrive, mappingMode, driveType)
+                cmdResult = myHostInfo.is_wrapped_device_present(myDrive)
                 currentTime = time.time()
                 if cmdResult is True:
                     logWrite("<Device enumerated correctly in " + str(currentTime - startTime) + " sec>")
                     break
                 if currentTime - startTime > onTime:
-                    logWrite("***FAIL: " + testName + " - Drive did not remove after " + str(onTime) + " sec ***")
+                    logWrite("***FAIL: " + testName + " - Drive did not return after " + str(onTime) + " sec ***")
+
+                    summary_list.append([str(testDelay), str(currentIteration + 1) + "/" + str(cycleIterations),
+                                         "Drive did not return after " + str(onTime) + " sec"])
                     break
 
             logWrite("Test - " + testName + " - Passed")
 
 
-def pcieHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive, plugSpeeds, driveType):
+def pcieHotplug(cycleIterations, mappingMode, myQuarchModule, offTime, onTime, myDrive, plugSpeeds):
     # Get the current link status
-    linkStartSpeed, linkStartWidth = myHostInfo.getPcieLinkStatus(myDrive, mappingMode)
-    logWrite("PCIe device link speed: " + linkStartSpeed)
-    logWrite("PCIe device link width: " + linkStartWidth)
+    linkStartSpeed = myDrive.link_speed
+    linkStartWidth = myDrive.lane_width
+    logWrite("PCIe device link speed: " + myDrive.link_speed)
+    logWrite("PCIe device link width: " + myDrive.lane_width)
     # Loop through the list of plug speeds
     for testDelay in plugSpeeds:
         testName = str(testDelay) + "mS HotPlug Test"
@@ -240,63 +286,70 @@ def pcieHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive
             logWrite("")
 
             # Setup hotplug timing (QTL1743 uses 3 sources by default)
-            setupSimpleHotplug(myDevice, testDelay, 3)
+            setupSimpleHotplug(myQuarchModule, testDelay, 3)
 
             # Pull the drive
             logWrite("Beginning the test sequence:\n")
             logWrite("  - Pulling the device...")
-            cmdResult = myDevice.sendCommand("RUN:POWer DOWN")
+            cmdResult = myQuarchModule.sendCommand("RUN:POWer DOWN")
             print("    <" + cmdResult + ">")
             if "OK" not in cmdResult:
                 logWrite("***FAIL: Power down command failed to execute correctly***")
                 logWrite("***" + cmdResult)
-                exitScript(myDevice)
+                exitScript(myQuarchModule)
             # Wait for device to remove
             logWrite("  - Waiting for device removal (" + str(offTime) + " Seconds Max)...")
             startTime = time.time()
             currentTime = time.time()
             while True:
-                cmdResult = myHostInfo.isDevicePresent(myDrive, mappingMode, driveType)
+                pullResult = myHostInfo.is_wrapped_device_present(myDrive)
                 currentTime = time.time()
-                if cmdResult is False:
+                if not pullResult:
                     logWrite("Device removed correctly in " + str(currentTime - startTime) + " sec")
                     break
                 if currentTime - startTime > offTime:
-                    logWrite("***FAIL: " + testName + " - Drive did not remove after " + str(offTime) + " sec ***")
+                    logWrite("***FAIL: " + testName + " - Drive was not removed after " + str(offTime) + " sec ***")
+
+                    summary_list.append([str(testDelay), str(currentIteration + 1) + "/" + str(cycleIterations),
+                                         "Drive was not removed after " + str(offTime) + " sec"])
                     break
 
             # Power up the drive
             logWrite("\n  - Plugging the device")
-            cmdResult = myDevice.sendCommand("RUN:POWer UP")
+            cmdResult = myQuarchModule.sendCommand("RUN:POWer UP")
             print("    <" + cmdResult + ">")
             if "OK" not in cmdResult:
                 logWrite("***FAIL: Power down command failed to execute correctly***")
                 logWrite("***" + cmdResult)
-                exitScript(myDevice)
+                exitScript(myQuarchModule)
             # Wait for device to enumerate
             logWrite("  - Waiting for device enumeration (" + str(onTime) + " Seconds Max)...")
             startTime = time.time()
             currentTime = time.time()
             while True:
-                cmdResult = myHostInfo.isDevicePresent(myDrive, mappingMode, driveType)
+                plugResult = myHostInfo.is_wrapped_device_present(myDrive)
                 currentTime = time.time()
-                if cmdResult is True:
+                if plugResult is True:
                     logWrite("<Device enumerated correctly in " + str(currentTime - startTime) + " sec>")
                     break
                 if currentTime - startTime > onTime:
-                    logWrite("***FAIL: " + testName + " - Drive did not remove after " + str(onTime) + " sec ***")
+                    logWrite("***FAIL: " + testName + " - Drive did not return after " + str(onTime) + " sec ***")
+
+                    summary_list.append([str(testDelay), str(currentIteration + 1) + "/" + str(cycleIterations),
+                                         "Drive did not return after " + str(onTime) + " sec"])
                     break
 
             # Verify link width and speed
-            linkEndSpeed, linkEndWidth = myHostInfo.getPcieLinkStatus(myDrive, mappingMode)
+            linkEndSpeed = myHostInfo.return_wrapped_drive_link(myDrive)
+            linkEndWidth = myHostInfo.return_wrapped_drive_width(myDrive)
             if linkStartSpeed != linkEndSpeed:
                 logWrite(
                     "***FAIL: " + testName + " - Speed Mismatch, " + linkStartSpeed + " -> " + linkEndSpeed + "***")
-                exitScript(myDevice)
+                exitScript(myQuarchModule)
             if linkStartWidth != linkEndWidth:
                 logWrite(
                     "***FAIL: " + testName + " - Width Mismatch, " + linkStartWidth + " -> " + linkEndWidth + "***")
-                exitScript(myDevice)
+                exitScript(myQuarchModule)
 
             logWrite("Test - " + testName + " - Passed")
 
@@ -315,8 +368,13 @@ def QuarchSimpleIdentify(device1):
     print(device1.sendCommand("*tst?"))
     print("")
 
+def return_drives_as_list(drive_list):
+    new_return = []
 
+    for drive in drive_list:
+        new_return.append("{0} :- {1}".format(drive.identifier_str, drive.description))
 
+    return new_return
 
 if __name__== "__main__":
     main()
