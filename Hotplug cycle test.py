@@ -8,7 +8,7 @@ This application note was written to be used in conjunction with QuarchPy and Qu
 14/10/2018 - Pedro Cruz	- Added support to other connection types and array controllers
 27/11/2019 - Stuart Boon - Compatible with linux, moved to lspci in Qpy, Updated for newest Qpy features like drive and module selection.
 11/11/2021 - Stuart Boon / Matt Holsey - Updating for use with newer drive detection mechanisms
-01/02/2023 - Matt Holsey - Restructoring / refacturing with instructions.
+01/02/2023 - Matt Holsey - Restructuring / refactoring with instructions.
 
 ########### REQUIREMENTS ###########
 
@@ -23,6 +23,10 @@ This application note was written to be used in conjunction with QuarchPy and Qu
 5- Check USB permissions if using Linux:
     https://quarch.com/support/faqs/usb/
 
+# LINUX USERS REQUIRE ADDITIONAL DOWNLOADS #
+- SmartCtl download : https://www.smartmontools.org/wiki/Download
+- PCIUTILS download : "sudo apt install pciutils"   ( Or your OS equivalent )
+
 ########### INSTRUCTIONS ###########
 
 1- Connect a Quarch module to your PC via QTL1260 Interface kit or array controller
@@ -35,24 +39,20 @@ This application note was written to be used in conjunction with QuarchPy and Qu
 
 # Try to make script back compatible to python 2.x
 from __future__ import print_function
-
 try:
     input = raw_input
 except NameError:
     pass
+
 # Imports QuarchPy library, providing the functions needed to use Quarch modules
-import re
 from quarchpy.device import *
-from quarchpy.device.device import *
-from quarchpy.user_interface import *
 from QuarchpyQCS.hostInformation import HostInformation
-from quarchpy.debug.versionCompare import *
+from quarchpy.user_interface import *
 from quarchpy.user_interface.user_interface import displayTable
 
 # Import other libraries used in the examples
 import os
 import time
-import platform
 import datetime
 import logging
 
@@ -73,10 +73,10 @@ def main():
     """
 
     # Setting parameters that control the test
-    onTime = 10  # Drive on time
-    offTime = 10  # Drive off time
+    onTimeout = 10  # Timeout (s) to poll for drive insertion
+    offTimeout = 10  # Timeout (s) to poll for drive removal
     mappingMode = False  # lspci mapping mode
-    plugSpeeds = [25, 100, 10, 500]  # Hot plug speeds
+    plugSpeeds = [25, 100, 10, 500]  # Hot plug speeds (mS) between pin lengths - Per UNH specification
     cycleIterations = 3  # Number of cycles at each speed
     linkSpeed = "ERROR"
     linkWidth = "ERROR"
@@ -88,7 +88,7 @@ def main():
     # Print header intro text
     logWrite("Quarch Technology Ltd")
     logWrite("HotPlug Test Suite V3.0")
-    logWrite("(c) Quarch Technology Ltd 2015-2021")
+    logWrite("(c) Quarch Technology Ltd 2015-2023")
     logWrite("")
 
     # Scan for quarch devices over all connection types (USB, Serial and LAN)
@@ -114,24 +114,26 @@ def main():
     # Sets the module to default state
     setDefaultState(myDevice)
 
-    # Check if the module is a legacy module or not
+    # Checking to see if Quarch module selected is legacy.
+    # Legacy modules may include out of date firmware or be unable to run at high resolution timings
+    # If the module is legacy, check if there's an update available on our website
+    # https://quarch.com/downloads/update-pack/
+    # Alternatively, consider enquiring about potential modules with newer functionality.
     is_legacy_module = check_legacy_timings(myDevice)
 
     logWrite("Running power up..." + myDevice.sendCommand("run pow up"))
 
-    # Check the module is connected and working
-    QuarchSimpleIdentify(myDevice)
-
-    # Retrieving a list of drives located on the system
-    listOfDrives = myHostInfo.return_wrapped_drives()
-    # Formatting list into 'nice' layout for user
-    listOfDrives = _return_drives_as_list(listOfDrives)
+    # Retrieve a list of drives located on system and format into a list
+    listOfDrives = retrieve_list_of_found_drives()
 
     # Asking user to select their drive from the list of drives found.
     selectedDrive = None
     while selectedDrive is None or selectedDrive in "Rescan":
         selectedDrive = listSelection(selectionList=listOfDrives, nice=True, additionalOptions=["Rescan", "Quit"],
                                       tableHeaders=["Drive"], align="c")
+
+        listOfDrives = retrieve_list_of_found_drives()
+
     if selectedDrive in "Quit":
         printText("User quit program")
         exitScript(myDevice)
@@ -143,10 +145,10 @@ def main():
 
     # If the drive is PCIE, do link verification on drive too
     if myDrive.drive_type == "pcie":
-        pcieHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive, plugSpeeds,
+        pcieHotplug(cycleIterations, mappingMode, myDevice, offTimeout, onTimeout, myDrive, plugSpeeds,
                     is_legacy_module)
     else:
-        basicHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive, plugSpeeds,
+        basicHotplug(cycleIterations, mappingMode, myDevice, offTimeout, onTimeout, myDrive, plugSpeeds,
                      is_legacy_module)
 
     logWrite("")
@@ -163,6 +165,14 @@ def main():
 
     # Close the module before exiting the script
     myDevice.closeConnection()
+
+
+def retrieve_list_of_found_drives():
+    # Retrieving a list of drives located on the system
+    listOfDrives = myHostInfo.return_wrapped_drives()
+    # Formatting list into 'nice' layout for user
+    listOfDrives = _return_drives_as_list(listOfDrives)
+    return listOfDrives
 
 
 def logWrite(log_string):
