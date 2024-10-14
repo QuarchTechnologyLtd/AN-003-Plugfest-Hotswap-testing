@@ -71,6 +71,10 @@ def main():
     """
     Main function for running test.
     """
+    logging.basicConfig(filename='output.log',
+     level=logging.DEBUG,
+     format= '[%(asctime)s] {%(pathname)s:%(lineno)d} %(levelname)s - %(message)s',
+     datefmt='%H:%M:%S')
 
     # Setting parameters that control the test
     onTimeout = 10  # Timeout (s) to poll for drive insertion
@@ -324,6 +328,7 @@ def basicHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDriv
 
     # Loop through the list of plug speeds
     for testDelay in plugSpeeds:
+        all_testpoints_passed = True
         testName = str(testDelay) + "mS HotPlug Test"
 
         # Loop through plug iterations
@@ -361,7 +366,7 @@ def basicHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDriv
                     break
                 if currentTime - startTime > offTime:
                     logWrite("***FAIL: " + testName + " - Drive was not removed after " + str(offTime) + " sec ***")
-
+                    all_testpoints_passed = False
                     summary_list.append([str(testDelay), str(currentIteration + 1) + "/" + str(cycleIterations),
                                          "Drive was not removed after " + str(offTime) + " sec"])
                     break
@@ -388,12 +393,14 @@ def basicHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDriv
                     break
                 if currentTime - startTime > onTime:
                     logWrite("***FAIL: " + testName + " - Drive did not return after " + str(onTime) + " sec ***")
-
+                    all_testpoints_passed = False
                     summary_list.append([str(testDelay), str(currentIteration + 1) + "/" + str(cycleIterations),
                                          "Drive did not return after " + str(onTime) + " sec"])
                     break
-
-            logWrite("Test - " + testName + " - Passed")
+            if all_testpoints_passed:
+                logWrite("Test - " + testName + " - Passed")
+            else:
+                logWrite("Test - " + testName + " - Failed")
 
 
 def pcieHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive, plugSpeeds, is_legacy_module):
@@ -423,6 +430,7 @@ def pcieHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive
 
     # Loop through the list of plug speeds
     for testDelay in plugSpeeds:
+        all_testpoints_passed = True
         testName = str(testDelay) + "mS HotPlug Test"
 
         # Loop through plug iterations
@@ -455,12 +463,12 @@ def pcieHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive
             while True:
                 pullResult = myHostInfo.is_wrapped_device_present(myDrive)
                 currentTime = time.time()
-                if not pullResult:
+                if not pullResult: # Looking for device to be missing after pull requested
                     logWrite("Device removed correctly in " + str(currentTime - startTime) + " sec")
                     break
                 if currentTime - startTime > offTime:
                     logWrite("***FAIL: " + testName + " - Drive was not removed after " + str(offTime) + " sec ***")
-
+                    all_testpoints_passed = False
                     summary_list.append([str(testDelay), str(currentIteration + 1) + "/" + str(cycleIterations),
                                          "Drive was not removed after " + str(offTime) + " sec"])
                     break
@@ -487,7 +495,7 @@ def pcieHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive
                     break
                 if currentTime - startTime > onTime:
                     logWrite("***FAIL: " + testName + " - Drive did not return after " + str(onTime) + " sec ***")
-
+                    all_testpoints_passed = False
                     summary_list.append([str(testDelay), str(currentIteration + 1) + "/" + str(cycleIterations),
                                          "Drive did not return after " + str(onTime) + " sec"])
                     break
@@ -502,8 +510,10 @@ def pcieHotplug(cycleIterations, mappingMode, myDevice, offTime, onTime, myDrive
                 logWrite("***FAIL: " + testName + " - Width Mismatch, " + linkStartWidth + " -> " + linkEndWidth + "***")
                 exitScript(myDevice)
 
-            logWrite("Test - " + testName + " - Passed")
-
+            if all_testpoints_passed:
+                logWrite("Test - " + testName + " - Passed")
+            else:
+                logWrite("Test - " + testName + " - Failed")
 
 def _return_drives_as_list(drive_list):
     """
